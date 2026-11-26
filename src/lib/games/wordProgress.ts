@@ -1,0 +1,69 @@
+import type { GameId, QuizGameId } from '@/lib/games/types';
+import type { LearningStatus, Word } from '@/lib/vocabulary';
+
+export const LEARNING_GAME_IDS: GameId[] = [
+  'flashcards',
+  'choose-word',
+  'find-image',
+  'turkish-find-image',
+  'read-choose',
+  'listen-choose',
+  'matching',
+  'image-matching',
+  'type-word',
+  'image-type',
+  'listen-fi-tr',
+  'listen-tr-fi',
+];
+
+export interface WordProgressPatch {
+  correct_count: number;
+  wrong_count: number;
+  last_studied_at: string;
+  learning_status: LearningStatus;
+  completed_game_types: string[];
+}
+
+export function getProgressPatch(
+  word: Word,
+  gameId: QuizGameId,
+  correct: boolean,
+  nowIso: string,
+): WordProgressPatch {
+  const completedGameTypes = addCompletedGameType(word.completed_game_types, gameId);
+  return {
+    correct_count: correct ? word.correct_count + 1 : word.correct_count,
+    wrong_count: correct ? word.wrong_count : word.wrong_count + 1,
+    last_studied_at: nowIso,
+    learning_status: word.learning_status_manual
+      ? word.learning_status
+      : nextLearningStatus(word.learning_status, correct, completedGameTypes),
+    completed_game_types: completedGameTypes,
+  };
+}
+
+export function getGameCompletionPatch(word: Word, gameId: GameId, nowIso: string): Pick<WordProgressPatch, 'last_studied_at' | 'learning_status' | 'completed_game_types'> {
+  const completedGameTypes = addCompletedGameType(word.completed_game_types, gameId);
+  return {
+    last_studied_at: nowIso,
+    learning_status: word.learning_status_manual
+      ? word.learning_status
+      : nextLearningStatus(word.learning_status, true, completedGameTypes),
+    completed_game_types: completedGameTypes,
+  };
+}
+
+function addCompletedGameType(completedGameTypes: string[], gameId: GameId): string[] {
+  return completedGameTypes.includes(gameId) ? completedGameTypes : [...completedGameTypes, gameId];
+}
+
+function nextLearningStatus(
+  status: LearningStatus,
+  correct: boolean,
+  completedGameTypes: string[],
+): LearningStatus {
+  if (status === 'learned') return 'learned';
+  if (LEARNING_GAME_IDS.every((gameId) => completedGameTypes.includes(gameId))) return 'learned';
+  if (!correct) return 'review';
+  return 'learning';
+}
